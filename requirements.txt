@@ -1,0 +1,10 @@
+ultralytics
+opencv-python
+numpy
+pandas
+matplotlib
+scikit-learn
+fastapi
+uvicorn
+python-multipart
+# Add other dependencies as needed

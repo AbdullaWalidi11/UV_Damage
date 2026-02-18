@@ -1,0 +1,13 @@
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.idea/
+.vscode/
+*.log
+data/raw/
+data/processed/
+models/*.pt
+!models/best.pt  # Keep specific models tracked if desired, or exclude all large files
+.env
+.DS_Store
