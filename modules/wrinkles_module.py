@@ -14,7 +14,8 @@ class WrinklesAnalyzer:
             self.model = YOLO(model_path)
             self.model_loaded = True
         except Exception as e:
-            print(f"Warning: Could not load model at {model_path}. Using fallback/dummy mode. Error: {e}")
+            # More descriptive error
+            print(f"CRITICAL WARNING: Could not load Wrinkles model at '{model_path}'. Check if file exists. Error: {e}")
             self.model = None
             self.model_loaded = False
 
@@ -25,16 +26,38 @@ class WrinklesAnalyzer:
         if not self.model_loaded:
             return None
 
+        image = cv2.imread(image_path)
+        if image is None:
+            print(f"Error: Could not load image at {image_path}")
+            return None
+
         # Run inference
         results = self.model.predict(image_path, conf=conf, verbose=False)
 
         if not results or results[0].masks is None:
             return None
 
-        masks = results[0].masks.data.cpu().numpy()
+        # Filter out "Face" vs "Wrinkle" confusion (Dataset Error Fix)
+        # Real wrinkles are thin lines. A mask covering the whole face is an error.
+        valid_masks = []
+        img_area = image.shape[0] * image.shape[1]
+        
+        for mask in results[0].masks.data:
+            mask_np = mask.cpu().numpy()
+            mask_area = np.sum(mask_np > 0)
+            ratio = mask_area / img_area
+            
+            # If a single mask covers > 5% of the image, it's likely a Face, not a Wrinkle.
+            if ratio < 0.05: 
+                valid_masks.append(mask_np)
+            else:
+                print(f"  > Ignored large mask (Ratio: {ratio:.4f}), likely a Face/Head detection.")
 
-        # Combine all masks (wrinkles often appear as multiple small lines)
-        combined_mask = np.sum(masks, axis=0)
+        if not valid_masks:
+            return None
+
+        # Combine valid masks
+        combined_mask = np.sum(valid_masks, axis=0)
         combined_mask = np.clip(combined_mask, 0, 1)
 
         return combined_mask

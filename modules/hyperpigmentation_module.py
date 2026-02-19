@@ -7,7 +7,7 @@ class HyperpigmentationAnalyzer:
     def __init__(self, model_path):
         self.model = YOLO(model_path)
 
-    def predict_mask(self, image_path, conf=0.10):
+    def predict_mask(self, image_path, conf=0.25):
         results = self.model.predict(image_path, conf=conf)
 
         if results[0].masks is None:

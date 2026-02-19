@@ -1,12 +1,14 @@
 import cv2
 import numpy as np
 
-class RednessAnalyzer:
+class RednessVascularAnalyzer:
     def __init__(self):
         """
-        Initialize the Redness Analyzer.
-        This module focuses purely on diffuse Erythema (general redness/inflammation)
-        and primarily uses Color Space Analysis since it's a color property, not a shape.
+        Initialize the Unified Redness & Vascular Analyzer.
+        
+        This module uses Color Space Analysis (LAB/HSV) to detect both:
+        1. Diffuse Erythema (Sunburn/Rosacea)
+        2. Vascular Signs (Spider Veins/Telangiectasia)
         """
         pass
 
@@ -25,8 +27,8 @@ class RednessAnalyzer:
         
         # Thresholding for "Abnormal" Redness
         # Note: Skin is naturally red. We need to find *excess* red.
-        # A good heuristic is values > 140-145 in the A-channel.
-        redness_mask = (a_channel > 145).astype(np.uint8) 
+        # Tuned: 145 -> 152 (More selective, less false positives on normal skin)
+        redness_mask = (a_channel > 152).astype(np.uint8) 
 
         # If skin_mask is provided, filter out non-skin areas (lips, background, eyes)
         if skin_mask is not None:
@@ -59,19 +61,31 @@ class RednessAnalyzer:
         lab = cv2.cvtColor(image, cv2.COLOR_BGR2LAB)
         _, a_channel, _ = cv2.split(lab)
         
+        # Ensure mask matches image dimensions (Crucial fix for passed-in resized masks)
+        if redness_mask.shape[:2] != a_channel.shape[:2]:
+            redness_mask = cv2.resize(redness_mask.astype(np.uint8), (a_channel.shape[1], a_channel.shape[0]), interpolation=cv2.INTER_NEAREST)
+        
         red_pixels = a_channel[redness_mask == 1]
         
         if len(red_pixels) == 0:
             return 0.0
             
         # Normalize intensity: 
-        # 145 (thresh) -> 0.0 severity
+        # 152 (thresh) -> 0.0 severity
         # 200 (very red) -> 1.0 severity
         avg_a_val = np.mean(red_pixels)
-        intensity_score = np.clip((avg_a_val - 145) / (200 - 145), 0, 1)
+        intensity_score = np.clip((avg_a_val - 152) / (200 - 152), 0, 1)
 
         # 4. Final Score
-        # Diffuse redness is often widespread, so area matters less than intensity
-        final_severity = (area_ratio * 0.4) + (intensity_score * 0.6)
+        # Calibration:
+        # Area: 30% coverage should be significant. (multiplier ~3.3)
+        # Intensity: We keep as is.
+        
+        area_score = min(area_ratio * 3.5, 1.0)
+        
+        # Weighted Average:
+        # Intensity matters more for "how bad it looks", Area matters for "how widespread"
+        # 50/50 Split seems balanced for general evaluation
+        final_severity = (area_score * 0.5) + (intensity_score * 0.5)
         
         return min(final_severity, 1.0)
